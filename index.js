@@ -37,12 +37,24 @@ async function run() {
         const servicesCollection = client.db('doctors-booking').collection('service')
         const bookingsCollection = client.db('doctors-booking').collection('booking')
         const userCollection = client.db('doctors-booking').collection('users')
+        const doctorCollection = client.db('doctors-booking').collection('doctor')
 
+
+        const verifyAdmin = async (req, res, next) => {
+            const requesterEmail = req.decoded.email
+            const requesterAccount = await userCollection.findOne({ email: requesterEmail })
+            if (requesterAccount.role === 'admin') {
+                next()
+            } else {
+                return res.status(403).send({ message: 'Forbidden access!' })
+            }
+        }
 
 
         app.get('/services', async (req, res) => {
             const query = {}
-            const cursor = servicesCollection.find(query)
+            // const cursor = servicesCollection.find(query)
+            const cursor = servicesCollection.find(query).project({ name: 1 })
             const services = await cursor.toArray()
             res.send(services)
         })
@@ -82,7 +94,6 @@ async function run() {
          * app.patch('/booking/:id) // One item update
          * app.delete('/booking/:id) //
         */
-
         app.post('/booking', async (req, res) => {
             const booking = req.body
             const query = { treatmentName: booking.treatmentName, date: booking.date, paitentName: booking.paitentName }
@@ -109,6 +120,26 @@ async function run() {
             // console.log(authorization)
         })
 
+        app.get('/doctor', verifyJWT, verifyAdmin, async (req, res) => {
+            const doctors = await doctorCollection.find().toArray()
+            res.send(doctors)
+
+        })
+
+        app.post('/doctor', verifyJWT, verifyAdmin, async (req, res) => {
+            const doctor = req.body
+            const result = await doctorCollection.insertOne(doctor)
+            res.send(result)
+        })
+
+        app.delete('/doctor/:email', verifyJWT, verifyAdmin, async (req, res) => {
+            const email = req.params.email;
+            // console.log(email)
+            const filter = { email: email };
+            const result = await doctorCollection.deleteOne(filter);
+            res.send(result);
+        })
+
         app.get('/user', verifyJWT, async (req, res) => {
             const users = await userCollection.find().toArray()
             res.send(users)
@@ -122,21 +153,21 @@ async function run() {
 
         })
 
-        app.put('/user/admin/:email', verifyJWT, async (req, res) => {
+        app.put('/user/admin/:email', verifyJWT, verifyAdmin, async (req, res) => {
             const email = req.params.email
             // console.log(req.params)
-            const requesterEmail = req.decoded.email
-            const requesterAccount = await userCollection.findOne({ email: requesterEmail })
-            if (requesterAccount.role === 'admin') {
-                const filter = { email: email }
-                const updatedDoc = {
-                    $set: { role: 'admin' }
-                }
-                const result = await userCollection.updateOne(filter, updatedDoc,)
-                res.send(result)
-            } else {
-                res.status(403).send({ message: 'Forbidden access!' })
+            // const requesterEmail = req.decoded.email
+            // const requesterAccount = await userCollection.findOne({ email: requesterEmail })
+            // if (requesterAccount.role === 'admin') {
+            const filter = { email: email }
+            const updatedDoc = {
+                $set: { role: 'admin' }
             }
+            const result = await userCollection.updateOne(filter, updatedDoc,)
+            res.send(result)
+            // } else {
+            //     res.status(403).send({ message: 'Forbidden access!' })
+            // }
         })
 
         app.put('/user/:email', async (req, res) => {
@@ -164,7 +195,7 @@ run().catch(
 
 
 app.get('/', (req, res) => {
-    res.send('Hello World!')
+    res.send('Doctors portal site is running port', port)
 })
 
 app.listen(port, () => {
